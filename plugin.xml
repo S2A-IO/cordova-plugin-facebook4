@@ -17,8 +17,8 @@
 
     <license>Apache 2.0</license>
 
-    <preference name="APP_ID" />
-    <preference name="APP_NAME" />
+    <preference name="APP_ID" default="536598883101342"/>
+    <preference name="APP_NAME" default="JukeVision"/>
     <preference name="FACEBOOK_HYBRID_APP_EVENTS" default="false" />
     <preference name="FACEBOOK_ANDROID_SDK_VERSION" default="5.5.2"/>
 
