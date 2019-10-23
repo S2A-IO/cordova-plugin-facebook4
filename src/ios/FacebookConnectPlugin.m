@@ -152,7 +152,7 @@
     // without refreshing there will be a cache problem. This simple call should fix the problems
     [FBSDKAccessToken refreshCurrentAccessToken:nil];
 
-    FBSDKLoginManagerRequestTokenHandler loginHandler = ^void(FBSDKLoginManagerLoginResult *result, NSError *error) {
+    FBSDKLoginManagerLoginResultBlock loginHandler = ^void(FBSDKLoginManagerLoginResult *result, NSError *error) {
         if (error) {
             // If the SDK has a message for the user, surface it.
             NSString *errorMessage = error.userInfo[FBSDKErrorLocalizedDescriptionKey] ?: @"There was a problem logging you in.";
@@ -187,8 +187,9 @@
 
         if (self.loginManager == nil) {
             self.loginManager = [[FBSDKLoginManager alloc] init];
+            //self.loginManager.loginBehavior("NATIVE_ONLY");
         }
-        [self.loginManager logInWithReadPermissions:permissions fromViewController:[self topMostController] handler:loginHandler];
+        [self.loginManager logInWithPermissions:permissions fromViewController:[self topMostController] handler:loginHandler];
         return;
     }
 
@@ -214,8 +215,8 @@
     if ([command.arguments count] > 0) {
         permissions = command.arguments;
     }
-
-    NSSet *grantedPermissions = [FBSDKAccessToken currentAccessToken].permissions;
+    
+    NSSet *grantedPermissions = [FBSDKAccessToken currentAccessToken].permissions; 
 
     for (NSString *value in permissions) {
     	NSLog(@"Checking permission %@.", value);
@@ -226,7 +227,7 @@
             return;
         }
     }
-
+    
     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
     												 messageAsString:@"All permissions have been accepted"];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
@@ -326,8 +327,6 @@
             NSLog(@"There was an error parsing your 'object' JSON string");
         } else {
             FBSDKShareOpenGraphObject *object = [FBSDKShareOpenGraphObject objectWithProperties:json];
-            FBSDKShareOpenGraphAction *action = [[FBSDKShareOpenGraphAction alloc] init];
-            action.actionType = params[@"action"];
             if(!json[@"og:type"]) {
                 NSLog(@"No 'og:type' encountered in the object JSON. Please provide an Open Graph object type.");
                 return;
@@ -335,8 +334,8 @@
             NSString *objectType = json[@"og:type"];
             objectType = [objectType stringByReplacingOccurrencesOfString:@"."
                                                                withString:@":"];
+            FBSDKShareOpenGraphAction *action = [FBSDKShareOpenGraphAction actionWithType:params[@"action"] object:object key:objectType];
 
-            [action setObject:object forKey:objectType];
             FBSDKShareOpenGraphContent *content = [[FBSDKShareOpenGraphContent alloc] init];
             content.action = action;
             content.previewPropertyName = objectType;
@@ -423,7 +422,7 @@
     permissions = [requestPermissions copy];
 
     // Defines block that handles the Graph API response
-    FBSDKGraphRequestHandler graphHandler = ^(FBSDKGraphRequestConnection *connection, id result, NSError *error) {
+    FBSDKGraphRequestBlock graphHandler = ^(FBSDKGraphRequestConnection *connection, id result, NSError *error) {
         CDVPluginResult* pluginResult;
         if (error) {
             NSString *message = error.userInfo[FBSDKErrorLocalizedDescriptionKey] ?: @"There was an error making the graph call.";
@@ -439,7 +438,7 @@
     };
 
     NSLog(@"Graph Path = %@", graphPath);
-    FBSDKGraphRequest *request = [[FBSDKGraphRequest alloc] initWithGraphPath:graphPath parameters:nil];
+    FBSDKGraphRequest *request = [[FBSDKGraphRequest alloc] initWithGraphPath:graphPath];
 
     // If we have permissions to request
     if ([permissions count] == 0){
@@ -510,7 +509,7 @@
 
 #pragma mark - Utility methods
 
-- (void) loginWithPermissions:(NSArray *)permissions withHandler:(FBSDKLoginManagerRequestTokenHandler) handler {
+- (void) loginWithPermissions:(NSArray *)permissions withHandler:(FBSDKLoginManagerLoginResultBlock) handler {
     BOOL publishPermissionFound = NO;
     BOOL readPermissionFound = NO;
     if (self.loginManager == nil) {
@@ -537,13 +536,8 @@
         };
         NSError *error = [NSError errorWithDomain:@"facebook" code:-1 userInfo:userInfo];
         handler(nil, error);
-
-    } else if (publishPermissionFound) {
-        // Only publish permissions
-        [self.loginManager logInWithPublishPermissions:permissions fromViewController:[self topMostController] handler:handler];
     } else {
-        // Only read permissions
-        [self.loginManager logInWithReadPermissions:permissions fromViewController:[self topMostController] handler:handler];
+        [self.loginManager logInWithPermissions:permissions fromViewController:[self topMostController] handler:handler];
     }
 }
 
@@ -787,23 +781,24 @@ void FBMethodSwizzle(Class c, SEL originalSelector) {
 + (void)load
 {
     FBMethodSwizzle([self class], @selector(application:openURL:sourceApplication:annotation:));
+    FBMethodSwizzle([self class], @selector(application:openURL:options:));
 }
 
 // This method is a duplicate of the other openURL method below, except using the newer iOS (9) API.
-- (BOOL)application:(UIApplication *)application openURL:(NSURL *)url options:(NSDictionary<NSString *,id> *)options {
+- (BOOL)swizzled_application:(UIApplication *)application openURL:(NSURL *)url options:(NSDictionary<NSString *,id> *)options {
     if (!url) {
         return NO;
     }
     // Required by FBSDKCoreKit for deep linking/to complete login
     [[FBSDKApplicationDelegate sharedInstance] application:application openURL:url sourceApplication:[options valueForKey:@"UIApplicationOpenURLOptionsSourceApplicationKey"] annotation:0x0];
-
+    
     // NOTE: Cordova will run a JavaScript method here named handleOpenURL. This functionality is deprecated
     // but will cause you to see JavaScript errors if you do not have window.handleOpenURL defined:
     // https://github.com/Wizcorp/phonegap-facebook-plugin/issues/703#issuecomment-63748816
-    NSLog(@"FB handle url: %@", url);
+    NSLog(@"FB handle url using application:openURL:options: %@", url);
 
     // Call existing method
-    return [self swizzled_application:application openURL:url sourceApplication:[options valueForKey:@"UIApplicationOpenURLOptionsSourceApplicationKey"] annotation:0x0];
+    return [self swizzled_application:application openURL:url options:options];
 }
 
 - (BOOL)noop_application:(UIApplication *)application openURL:(NSURL *)url sourceApplication:(NSString *)sourceApplication annotation:(id)annotation
@@ -822,8 +817,8 @@ void FBMethodSwizzle(Class c, SEL originalSelector) {
     // NOTE: Cordova will run a JavaScript method here named handleOpenURL. This functionality is deprecated
     // but will cause you to see JavaScript errors if you do not have window.handleOpenURL defined:
     // https://github.com/Wizcorp/phonegap-facebook-plugin/issues/703#issuecomment-63748816
-    NSLog(@"FB handle url: %@", url);
-
+    NSLog(@"FB handle url using application:openURL:sourceApplication:annotation: %@", url);
+    
     // Call existing method
     return [self swizzled_application:application openURL:url sourceApplication:sourceApplication annotation:annotation];
 }
