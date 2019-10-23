@@ -187,7 +187,7 @@
 
         if (self.loginManager == nil) {
             self.loginManager = [[FBSDKLoginManager alloc] init];
-            self.loginManager.loginBehavior("NATIVE_ONLY");
+            //self.loginManager.loginBehavior("NATIVE_ONLY");
         }
         [self.loginManager logInWithPermissions:permissions fromViewController:[self topMostController] handler:loginHandler];
         return;
