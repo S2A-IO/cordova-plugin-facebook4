@@ -187,7 +187,7 @@
 
         if (self.loginManager == nil) {
             self.loginManager = [[FBSDKLoginManager alloc] init];
-            self.loginManager.setLoginBehavior('NATIVE_WITH_FALLBACK');
+            self.loginManager.setLoginBehavior("NATIVE_WITH_FALLBACK");
         }
         [self.loginManager logInWithPermissions:permissions fromViewController:[self topMostController] handler:loginHandler];
         return;
